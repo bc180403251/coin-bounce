@@ -1,6 +1,8 @@
    const Joi=require('joi');
    const User= require('../modals/user');
    const bcrypt= require('bcrypt')
+//    const userDto= require('../dto/userDto');
+const UserDto = require('../dto/userDto');
 
    const passwordPattern = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,25}$/;
    
@@ -75,15 +77,79 @@
 
            const user= await usertoRegister.save();
 
+           const userDto= new UserDto(user)
+
             // response send 
 
-            return res.status(201).json({user})
+            return res.status(201).json({
+                userDto
+            })
 
         },
 
 
         // user login function
-        async login(){
+        async login(req, res, next){
+
+            const userSchema=Joi.object({
+                username: Joi.string().min(5).max(30),
+                email: Joi.string().email(),
+                password:Joi.string().pattern(passwordPattern)
+            }).xor('username', 'email')
+
+            const {error, value}=userSchema.validate(req.body)
+
+            if(error){
+                return next(error)
+            }
+
+            const {email, username, password}= req.body;
+            try {
+
+                let query= {}
+
+                if(value.username){
+                    query.username= value.username;
+                } else if( value.email){
+                    query.email= value.email
+
+                }
+
+                const user =  await User.findOne(query);
+
+                if(!user){
+                    const error={
+                        status: 404,
+                        message:'Invalid Username/email'
+                    }
+
+                   return next(error)
+                }
+                if(user){
+                    const match= bcrypt.compareSync(password, user.password)
+
+                    if(!match){
+                        const error={
+                            status:401,
+                            message:'Incurrect Password/ Invalid Password'
+                        }
+
+                        return next(error)
+                    }
+
+                    const userDto= new UserDto(user)
+
+                    return res.status(200).json({
+                        message: 'login succesfully!',
+                        user: userDto
+                    })
+
+                }
+            } catch (error) {
+
+                return next(error)
+                
+            }
 
         }
     }
